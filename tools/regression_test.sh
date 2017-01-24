@@ -127,8 +127,8 @@ function init_arguments {
     DB_BENCH_DIR=${5:-"$1/db_bench"}
   fi
 
-  SCP=${SCP:-"scp"}
-  SSH=${SSH:-"ssh"}
+  SCP=${SCP:-"scp -i .ssh/id_rsa"}
+  SSH=${SSH:-"ssh -i .ssh/id_rsa"}
   NUM_THREADS=${NUM_THREADS:-16}
   NUM_KEYS=${NUM_KEYS:-$((1 * G))}  # key range
   NUM_OPS=${NUM_OPS:-$(($NUM_KEYS / $NUM_THREADS))}
@@ -314,13 +314,11 @@ function run_remote {
   fi
 
   eval "$cmd"
-  echo "remote $cmd $?"
   exit_on_error $? "$cmd"
 }
 
 function run_local {
   eval "$1"
-  echo "local $1 $?"
   exit_on_error $?
 }
 
