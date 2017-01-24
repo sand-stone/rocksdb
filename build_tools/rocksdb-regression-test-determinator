@@ -22,6 +22,7 @@ DAILY_REGRESSION_TEST_COMMANDS="[
             },
             {
                 'name':'Run RocksDB regression test script',
+                'timeout':86400,
                 'shell':'REMOTE_HOST=udb4470.prn1.facebook.com REPORTER=./report_rocksdb_bench_result MAILER=./email_notification.par OPTIONS_DIR=fbcode/fbcode/rocks/tools/regression_test_options fbcode/fbcode/rocks/tools/rocks_regression_test.sh',
                 'user':'root',
             },
