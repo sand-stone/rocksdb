@@ -314,11 +314,13 @@ function run_remote {
   fi
 
   eval "$cmd"
+  echo "remote $cmd $?"
   exit_on_error $? "$cmd"
 }
 
 function run_local {
   eval "$1"
+  echo "local $1 $?"
   exit_on_error $?
 }
 
