@@ -17,12 +17,12 @@ DAILY_REGRESSION_TEST_COMMANDS="[
             },
             {
                 'name':'Build RocksDB tools',
-                'shell':'cd fbcode/fbcode && buck build rocks/tools/..',
+                'shell':'fbpkg fetch rocksdb.regression_test_tools
                 'user':'root',
             },
             {
                 'name':'Run RocksDB regression test script',
-                'shell':'REMOTE_HOST=fbcode/fbcode/rocks/tools/rocks_regression_test.sh',
+                'shell':'REMOTE_HOST=udb4470.prn1.facebook.com REPORTER=./report_rocksdb_bench_result MAILER=./email_notification.par fbcode/fbcode/rocks/tools/rocks_regression_test.sh',
                 'user':'root',
             },
         ],
