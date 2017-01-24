@@ -17,7 +17,7 @@ DAILY_REGRESSION_TEST_COMMANDS="[
             },
             {
                 'name':'Build RocksDB tools',
-                'shell':'fbpkg fetch rocksdb.regression_test_tools
+                'shell':'fbpkg fetch rocksdb.regression_test_tools',
                 'user':'root',
             },
             {
