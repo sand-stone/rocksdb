@@ -36,6 +36,7 @@
 #else
 #include <chrono>
 #endif
+#include <iostream>
 #include <deque>
 #include <set>
 #include <vector>
@@ -900,6 +901,113 @@ std::string Env::GenerateUniqueId() {
   return uuid2;
 }
 
+class XWritableFile : public PosixWritableFile {
+
+};
+
+class XEnv : public PosixEnv {
+ public:
+  XEnv() {
+    printf("boot HybridEnv \n");
+  }
+
+  virtual Status NewSequentialFile(const std::string& fname,
+                                   unique_ptr<SequentialFile>* result,
+                                   const EnvOptions& options) override {
+    std::cout<<"new seq:" << fname << std::endl;
+    return PosixEnv::NewSequentialFile(fname, result, options);
+  }
+
+  virtual Status NewRandomAccessFile(const std::string& fname,
+                                     unique_ptr<RandomAccessFile>* result,
+                                     const EnvOptions& options) override {
+    std::cout<<"new rnd:" << fname << std::endl;
+    return PosixEnv::NewRandomAccessFile(fname, result, options);
+  }
+
+  virtual Status NewWritableFile(const std::string& fname,
+                                 unique_ptr<WritableFile>* result,
+                                 const EnvOptions& options) override {
+    std::cout<<"new write:" << fname << std::endl;
+    return PosixEnv::NewWritableFile(fname, result, options);
+  }
+
+  virtual Status ReuseWritableFile(const std::string& fname,
+                                   const std::string& old_fname,
+                                   unique_ptr<WritableFile>* result,
+                                   const EnvOptions& options) override {
+    std::cout<<"reuse write:" << fname << "=>" << old_fname << std::endl;
+    return PosixEnv::ReuseWritableFile(fname, old_fname, result, options);
+  }
+
+  virtual Status NewRandomRWFile(const std::string& fname,
+                                 unique_ptr<RandomRWFile>* result,
+                                 const EnvOptions& options) override {
+    std::cout<<"NewRandomRWFile:" << fname << std::endl;
+    return PosixEnv::NewRandomRWFile(fname, result, options);
+  }
+
+  virtual Status NewDirectory(const std::string& name,
+                              unique_ptr<Directory>* result) override {
+    std::cout<<"New dir:" << name << std::endl;
+    return PosixEnv::NewDirectory(name, result);
+  }
+
+  virtual Status GetAbsolutePath(const std::string& db_path,
+                                 std::string* output_path) override {
+    std::cout<<"Get abs path:" << db_path << std::endl;
+    return PosixEnv::GetAbsolutePath(db_path, output_path);
+  }
+
+  virtual Status RenameFile(const std::string& src,
+                            const std::string& target) override {
+    std::cout<<"RenameFile file:" << src << " ==>" << target << std::endl;
+    return PosixEnv::RenameFile(src, target);
+  }
+
+  /*virtual Status FileExists(const std::string& fname) override {
+  }
+
+  virtual Status GetChildren(const std::string& dir,
+                             std::vector<std::string>* result) override {
+  }
+
+  virtual Status DeleteFile(const std::string& fname) override {
+  };
+
+  virtual Status CreateDir(const std::string& name) override {
+  };
+
+  virtual Status CreateDirIfMissing(const std::string& name) override {
+  };
+
+  virtual Status DeleteDir(const std::string& name) override {
+  };
+
+  virtual Status GetFileSize(const std::string& fname,
+                             uint64_t* size) override {
+  }
+
+  virtual Status GetFileModificationTime(const std::string& fname,
+                                         uint64_t* file_mtime) override {
+  }
+  virtual Status RenameFile(const std::string& src,
+                            const std::string& target) override {
+  }
+
+  virtual Status LinkFile(const std::string& src,
+                          const std::string& target) override {
+  }
+
+  virtual Status LockFile(const std::string& fname, FileLock** lock) override {
+  }
+
+  virtual Status UnlockFile(FileLock* lock) override {
+  } */
+
+  virtual ~XEnv() {}
+};
+
 //
 // Default Posix Env
 //
@@ -915,7 +1023,8 @@ Env* Env::Default() {
   // the destructor of static PosixEnv will go first, then the
   // the singletons of ThreadLocalPtr.
   ThreadLocalPtr::InitSingletons();
-  static PosixEnv default_env;
+  //static PosixEnv default_env;
+  static XEnv default_env;
   return &default_env;
 }
 
