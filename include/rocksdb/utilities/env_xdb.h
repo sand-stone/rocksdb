@@ -19,6 +19,10 @@ class EnvXdb : public EnvWrapper {
                                  unique_ptr<WritableFile>* result,
                                  const EnvOptions& options) override;
 
+  virtual Status NewSequentialFile(const std::string& fname,
+                                   std::unique_ptr<SequentialFile>* result,
+                                   const EnvOptions& options) override;
+
   virtual Status NewDirectory(const std::string& name,
                               unique_ptr<Directory>* result) override;
 
