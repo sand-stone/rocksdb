@@ -8,12 +8,21 @@
 #include "rocksdb/status.h"
 
 #include "util/io_posix.h"
+#include "was/blob.h"
+#include "was/common.h"
+#include "was/queue.h"
+#include "was/storage_account.h"
+#include "was/table.h"
 
 namespace rocksdb {
 
+class XdbWritableFile;
+
 class EnvXdb : public EnvWrapper {
+  friend class XdbWritableFile;
+
  public:
-  explicit EnvXdb(Env* env, const std::string& connect_string);
+  explicit EnvXdb(Env* env);
 
   virtual Status NewWritableFile(const std::string& fname,
                                  unique_ptr<WritableFile>* result,
@@ -37,5 +46,7 @@ class EnvXdb : public EnvWrapper {
   static EnvXdb* Default(Env* env);
 
  private:
+  azure::storage::cloud_blob_client _blob_client;
+  azure::storage::cloud_blob_container _container;
 };
 }

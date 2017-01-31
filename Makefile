@@ -141,7 +141,7 @@ endif
 LIB_SOURCES += utilities/env_xdb.cc
 CFLAGS += -I /usr/local/Cellar/openssl/1.0.2j/include -L/usr/local/lib #-L/usr/local/Cellar/openssl/1.0.2j/lib -lboost_system -lssl -lcrypto -lcpprest -lazurestorage -lboost_system-mt
 CXXFLAGS += -I /usr/local/Cellar/openssl/1.0.2j/include #-L/usr/local/lib -L/usr/local/Cellar/openssl/1.0.2j/lib -lboost_system -lssl -lcrypto -lcpprest -lazurestorage -lboost_system-mt
-LDFLAGS += -L/usr/local/lib -L/usr/local/Cellar/openssl/1.0.2j/lib -lboost_system -lssl -lcrypto -lcpprest -lazurestorage -lboost_system-mt
+LDFLAGS += -L/usr/local/lib -L/usr/local/Cellar/openssl/1.0.2j/lib -lboost_system -lssl -lcrypto -lcpprest -lazurestorage -lboost_system-mt -lboost_thread-mt -lboost_chrono
 
 AM_LINK = $(AM_V_CCLD)$(CXX) $^ $(EXEC_LDFLAGS) -o $@ $(LDFLAGS) $(COVERAGEFLAGS)
 # detect what platform we're building on
@@ -1430,7 +1430,7 @@ java_static_libobjects = $(patsubst %,jls/%,$(LIBOBJECTS))
 CLEAN_FILES += jls
 
 JAVA_STATIC_FLAGS = -DZLIB -DBZIP2 -DSNAPPY -DLZ4
-JAVA_STATIC_LDFLAGS = -L/usr/local/lib -L/usr/local/Cellar/openssl/1.0.2j/lib -lssl -lcrypto -lcpprest -lazurestorage -lboost_system-mt
+JAVA_STATIC_LDFLAGS = -L/usr/local/lib -L/usr/local/Cellar/openssl/1.0.2j/lib -lssl -lcrypto -lcpprest -lazurestorage -lboost_system-mt -lboost_thread-mt -lboost_chrono
 JAVA_STATIC_INCLUDES = -I./zlib-1.2.11 -I./bzip2-1.0.6 -I./snappy-1.1.3 -I./lz4-r127/lib
 
 $(java_static_libobjects): jls/%.o: %.cc libz.a libbz2.a libsnappy.a liblz4.a

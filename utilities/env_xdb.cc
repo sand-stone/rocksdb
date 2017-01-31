@@ -15,6 +15,7 @@ using namespace azure::storage;
 namespace rocksdb {
 
 const char* default_conn = "XDB_WAS_CONN";
+const char* default_container = "XDB_WAS_CONTAINER";
 
 Status err_to_status(int r) {
   switch (r) {
@@ -38,7 +39,7 @@ Status err_to_status(int r) {
 
 class XdbWritableFile : public WritableFile {
  public:
-  XdbWritableFile() {}
+  XdbWritableFile(cloud_page_blob& page_blob) : _page_blob(page_blob) {}
 
   ~XdbWritableFile() {}
 
@@ -53,6 +54,11 @@ class XdbWritableFile : public WritableFile {
   Status Close() { return err_to_status(0); }
 
   Status Flush() { return err_to_status(0); }
+
+  Status Sync() { return err_to_status(0); }
+
+ private:
+  cloud_page_blob _page_blob;
 };
 
 class XdbSequentialFile : public SequentialFile {
@@ -64,16 +70,35 @@ class XdbSequentialFile : public SequentialFile {
   }
 };
 
-EnvXdb::EnvXdb(Env* env, const std::string& connect_string)
-    //: EnvWrapper(Env::Default()) {
-    : EnvWrapper(env) {
-  printf("boot from EnvXdb\n");
+EnvXdb::EnvXdb(Env* env) : EnvWrapper(env) {
+  // static EnvXdb default_env(env, std::getenv(default_conn));
+  // char* connect_string =
+  char* connect_string = std::getenv(default_conn);
+  char* container_name = std::getenv(default_container);
+  if (connect_string == NULL || container_name == NULL) {
+    std::cout << "connect_string or container_name is needed" << std::endl;
+    exit(-1);
+  }
+  // std::cout << "connect_string: " << connect_string << std::endl;
+  try {
+    cloud_storage_account storage_account =
+        cloud_storage_account::parse(connect_string);
+    _blob_client = storage_account.create_cloud_blob_client();
+    _container = _blob_client.get_container_reference(container_name);
+    // Create the container if it does not exist yet
+    _container.create_if_not_exists();
+  } catch (...) {
+    std::cout << "connect_string is invalid" << std::endl;
+    exit(-1);
+  }
 }
 
 Status EnvXdb::NewWritableFile(const std::string& fname,
                                unique_ptr<WritableFile>* result,
                                const EnvOptions& options) {
   std::cout << "new write file:" << fname << std::endl;
+  cloud_page_blob page_blob = _container.get_page_blob_reference(fname);
+  XdbWritableFile* xfile = new XdbWritableFile(page_blob);
   return EnvWrapper::NewWritableFile(fname, result, options);
 }
 
@@ -94,12 +119,12 @@ Status EnvXdb::GetAbsolutePath(const std::string& db_path,
 }
 
 Status EnvXdb::RenameFile(const std::string& src, const std::string& target) {
+  std::cout << "rename from:" << src << " to:" << target << std::endl;
   return EnvWrapper::RenameFile(src, target);
 }
 
 EnvXdb* EnvXdb::Default(Env* env) {
-  // static EnvXdb default_env(env, std::getenv(default_conn));
-  static EnvXdb default_env(env, "acme");
+  static EnvXdb default_env(env);
   return &default_env;
 }
 }
