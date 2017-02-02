@@ -50,22 +50,17 @@ class XdbSequentialFile : public SequentialFile {
     std::cout << "<<<read data: " << n << std::endl;
     _offset = (_offset >> 9) << 9;
     size_t nz = ((n >> 9) + 1) << 9;
-    std::cout << "<<<download pages between " << _offset << " and:" << nz <<
-      std::endl;
+    std::cout << "<<<download pages between " << _offset << " and:" << nz
+              << std::endl;
     std::vector<page_range> pages =
         _page_blob.download_page_ranges(_offset, nz);
     concurrency::streams::istream blobstream = _page_blob.open_read();
     char* target = scratch;
     size_t len = 0;
-      for (std::vector<page_range>::iterator it = pages.begin(); it < pages.end();
-     it++) {
-        std::cout << "page start:" << it->start_offset() << "page end:" <<
-          it->end_offset() << std::endl;
-      }
     for (std::vector<page_range>::iterator it = pages.begin(); it < pages.end();
          it++) {
-      std::cout << "page start:" << it->start_offset() << "page end:" <<
-       it->end_offset() << std::endl;
+      std::cout << "page start:" << it->start_offset()
+                << "page end:" << it->end_offset() << std::endl;
       blobstream.seek(it->start_offset());
       concurrency::streams::stringstreambuf buffer;
       blobstream.read(buffer, it->end_offset() - it->start_offset());
@@ -93,18 +88,17 @@ class XdbSequentialFile : public SequentialFile {
 
 class XdbWritableFile : public WritableFile {
  public:
-  XdbWritableFile(cloud_page_blob& page_blob) : _page_blob(page_blob) {
+  XdbWritableFile(cloud_page_blob& page_blob) : _page_blob(page_blob), _index(0) {
     _page_blob.create(64 * 1024 * 1024);
   }
 
   ~XdbWritableFile() {}
 
   Status Append(const Slice& data) {
-    // std::cout << "append data: " << data.size() << std::endl;
-    const int page_size = 4 * 1024;
+    std::cout << "append data: " << data.size() << std::endl;
+    const int page_size = 1024*4;
     std::vector<char> vector_buffer;
     const char* src = data.data();
-    int index = 0;
     vector_buffer.reserve(page_size);
     size_t rc = data.size();
     while (rc > 0) {
@@ -122,8 +116,8 @@ class XdbWritableFile : public WritableFile {
       }
       concurrency::streams::istream page_stream =
           concurrency::streams::bytestream::open_istream(vector_buffer);
-      azure::storage::page_range range(index * page_size,
-                                       index * page_size + page_size - 1);
+      azure::storage::page_range range(_index * page_size,
+                                       _index * page_size + page_size - 1);
       try {
         _page_blob.upload_pages(page_stream, range.start_offset(),
                                 utility::string_t(U("")));
@@ -131,8 +125,9 @@ class XdbWritableFile : public WritableFile {
         std::cout << "append error:" << e.what() << std::endl;
       }
       vector_buffer.clear();
-      index++;
+      _index++;
     }
+    std::cout << "page size: "<< page_size << " append pages: " << _index << std::endl;
     return err_to_status(0);
   }
 
@@ -150,6 +145,7 @@ class XdbWritableFile : public WritableFile {
 
  private:
   cloud_page_blob _page_blob;
+  size_t _index;
 };
 
 EnvXdb::EnvXdb(Env* env) : EnvWrapper(env) {
