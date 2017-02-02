@@ -45,6 +45,14 @@ class EnvXdb : public EnvWrapper {
   virtual Status GetChildren(const std::string& dir,
                              std::vector<std::string>* r) override;
 
+  virtual Status DeleteFile(const std::string& f) override;
+
+  virtual Status CreateDir(const std::string& d) override;
+
+  virtual Status CreateDirIfMissing(const std::string& d) override;
+
+  virtual Status DeleteDir(const std::string& d) override;
+
   virtual ~EnvXdb() {}
 
   static EnvXdb* Default(Env* env);

@@ -57,6 +57,7 @@ class XdbSequentialFile : public SequentialFile {
     concurrency::streams::istream blobstream = _page_blob.open_read();
     char* target = scratch;
     size_t len = 0;
+    size_t remain = n;
     for (std::vector<page_range>::iterator it = pages.begin(); it < pages.end();
          it++) {
       std::cout << "page start:" << it->start_offset()
@@ -66,13 +67,18 @@ class XdbSequentialFile : public SequentialFile {
       blobstream.read(buffer, it->end_offset() - it->start_offset());
       size_t bsize = buffer.size();
       std::cout << "read back size:" << bsize;
+      if (bsize > remain) bsize = remain;
       buffer.scopy(target, bsize);
+      remain -= bsize;
       target += bsize;
       len += bsize;
     }
     std::cout << ">>>> actual read data: " << len << std::endl;
     _offset += len;
-    *result = Slice(scratch, len);
+    if (len == 0)
+      *result = Slice();
+    else
+      *result = Slice(scratch, len >= n ? n : len);
     return err_to_status(0);
   }
 
@@ -88,7 +94,8 @@ class XdbSequentialFile : public SequentialFile {
 
 class XdbWritableFile : public WritableFile {
  public:
-  XdbWritableFile(cloud_page_blob& page_blob) : _page_blob(page_blob), _index(0) {
+  XdbWritableFile(cloud_page_blob& page_blob)
+      : _page_blob(page_blob), _index(0) {
     _page_blob.create(64 * 1024 * 1024);
   }
 
@@ -96,7 +103,7 @@ class XdbWritableFile : public WritableFile {
 
   Status Append(const Slice& data) {
     std::cout << "append data: " << data.size() << std::endl;
-    const int page_size = 1024*4;
+    const int page_size = 1024 * 4;
     std::vector<char> vector_buffer;
     const char* src = data.data();
     vector_buffer.reserve(page_size);
@@ -127,7 +134,8 @@ class XdbWritableFile : public WritableFile {
       vector_buffer.clear();
       _index++;
     }
-    std::cout << "page size: "<< page_size << " append pages: " << _index << std::endl;
+    std::cout << "page size: " << page_size << " append pages: " << _index
+              << std::endl;
     return err_to_status(0);
   }
 
@@ -202,11 +210,16 @@ Status EnvXdb::NewSequentialFile(const std::string& fname,
 
 Status EnvXdb::NewDirectory(const std::string& name,
                             unique_ptr<Directory>* result) {
+  std::cout << "new dir:" << name << std::endl;
+  if (name.find(was_store) == 0) {
+    return Status::OK();
+  }
   return EnvWrapper::NewDirectory(name, result);
 }
 
 Status EnvXdb::GetAbsolutePath(const std::string& db_path,
                                std::string* output_path) {
+  std::cout << "abs path:" << db_path << std::endl;
   return EnvWrapper::GetAbsolutePath(db_path, output_path);
 }
 
@@ -217,7 +230,7 @@ std::string lastname(const std::string& name) {
 
 Status EnvXdb::GetChildren(const std::string& dir,
                            std::vector<std::string>* result) {
-  std::cout << "GetChildren for: " << dir << std::endl;
+  // std::cout << "GetChildren for: " << dir << std::endl;
   if (dir.find(was_store) == 0) {
     try {
       result->clear();
@@ -227,16 +240,16 @@ Status EnvXdb::GetChildren(const std::string& dir,
                blob_request_options(), operation_context());
            it != end; it++) {
         if (it->is_blob()) {
-          std::cout << "blob:" << it->as_blob().name() << std::endl;
+          // std::cout << "blob:" << it->as_blob().name() << std::endl;
         } else {
           list_blob_item_iterator bend;
-          std::cout << "enumerate folder:" << it->as_directory().prefix()
-                    << std::endl;
+          // std::cout << "enumerate folder:" << it->as_directory().prefix()
+          //<< std::endl;
           for (list_blob_item_iterator bit = it->as_directory().list_blobs();
                bit != bend; bit++) {
             if (bit->is_blob()) {
               result->push_back(lastname(bit->as_blob().name()));
-              std::cout << "blob:" << bit->as_blob().name() << std::endl;
+              // std::cout << "blob:" << bit->as_blob().name() << std::endl;
             }
           }
         }
@@ -308,6 +321,34 @@ Status EnvXdb::RenameFile(const std::string& src, const std::string& target) {
     return Status::OK();
   }
   return EnvWrapper::RenameFile(src, target);
+}
+
+Status EnvXdb::DeleteFile(const std::string& f) {
+  if (f.find(was_store) == 0) {
+    return Status::OK();
+  }
+  return EnvWrapper::DeleteFile(f);
+}
+
+Status EnvXdb::CreateDir(const std::string& d) {
+  if (d.find(was_store) == 0) {
+    return Status::OK();
+  }
+  return EnvWrapper::CreateDir(d);
+}
+
+Status EnvXdb::CreateDirIfMissing(const std::string& d) {
+  if (d.find(was_store) == 0) {
+    return Status::OK();
+  }
+  return EnvWrapper::CreateDirIfMissing(d);
+}
+
+Status EnvXdb::DeleteDir(const std::string& d) {
+  if (d.find(was_store) == 0) {
+    return Status::OK();
+  }
+  return EnvWrapper::DeleteDir(d);
 }
 
 EnvXdb* EnvXdb::Default(Env* env) {
