@@ -46,6 +46,8 @@ class EnvXdb : public EnvWrapper {
   static EnvXdb* Default(Env* env);
 
  private:
+  int WASRename(const std::string& src, const std::string& target);
+ private:
   azure::storage::cloud_blob_client _blob_client;
   azure::storage::cloud_blob_container _container;
 };

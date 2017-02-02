@@ -3,6 +3,7 @@
 #include <chrono>
 #include <ctime>
 #include <iostream>
+#include <thread>
 #include "cpprest/filestream.h"
 #include "was/blob.h"
 #include "was/common.h"
@@ -47,7 +48,7 @@ class XdbWritableFile : public WritableFile {
   ~XdbWritableFile() {}
 
   Status Append(const Slice& data) {
-    std::cout << "append data: " << data.size() << std::endl;
+    // std::cout << "append data: " << data.size() << std::endl;
     const int page_size = 4 * 1024;
     std::vector<char> vector_buffer;
     const char* src = data.data();
@@ -62,10 +63,9 @@ class XdbWritableFile : public WritableFile {
       } else {
         vector_buffer.insert(vector_buffer.end(), src, src + rc);
         rc = page_size - rc;
-        while(rc-- > 0) {
+        while (rc-- > 0) {
           vector_buffer.insert(vector_buffer.end(), 0);
         }
-        //std::fill(vector_buffer.end(), vector_buffer.end() + page_size - rc, 0);
         rc = 0;
       }
       concurrency::streams::istream page_stream =
@@ -73,8 +73,6 @@ class XdbWritableFile : public WritableFile {
       azure::storage::page_range range(index * page_size,
                                        index * page_size + page_size - 1);
       try {
-        // std::cout << "upload page range: " << range.start_offset() <<
-        // std::endl;
         _page_blob.upload_pages(page_stream, range.start_offset(),
                                 utility::string_t(U("")));
       } catch (const azure::storage::storage_exception& e) {
@@ -166,8 +164,63 @@ Status EnvXdb::GetAbsolutePath(const std::string& db_path,
   return EnvWrapper::GetAbsolutePath(db_path, output_path);
 }
 
+void fixname(std::string& name) {
+  std::size_t pos = name.find_first_of("//");
+  if (pos != std::string::npos) {
+    name.erase(pos, 1);
+  }
+}
+
+int EnvXdb::WASRename(const std::string& source, const std::string& target) {
+  try {
+    std::string src(source);
+    fixname(src);
+    std::cout << "src: " << src << " dst: " << target << std::endl;
+    cloud_page_blob target_blob = _container.get_page_blob_reference(target);
+    target_blob.create(64 * 1024 * 1024);
+    cloud_page_blob src_blob = _container.get_page_blob_reference(src);
+    utility::string_t copy_id = target_blob.start_copy(src_blob);
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    target_blob.download_attributes();
+    copy_state state = target_blob.copy_state();
+    if (state.status() == copy_status::success) {
+      src_blob.delete_blob();
+      return 0;
+    } else {
+      utility::string_t state_description;
+      switch (state.status()) {
+        case copy_status::aborted:
+          state_description = "aborted";
+          break;
+        case copy_status::failed:
+          state_description = "failed";
+          break;
+        case copy_status::invalid:
+          state_description = "invalid";
+          break;
+        case copy_status::pending:
+          state_description = "pending";
+          break;
+        case copy_status::success:
+          state_description = "success";
+          break;
+      }
+      std::cout << "ErrorX:" << state_description << std::endl
+                << "The blob could not be copied." << std::endl;
+    }
+  } catch (const azure::storage::storage_exception& e) {
+    std::cout << "Error:" << e.what() << std::endl
+              << "The blob could not be copied." << std::endl;
+  }
+  return -1;
+}
+
 Status EnvXdb::RenameFile(const std::string& src, const std::string& target) {
   std::cout << "rename from:" << src << " to:" << target << std::endl;
+  if (src.find(was_store) == 0 && target.find(was_store) == 0) {
+    WASRename(src.substr(4), target.substr(4));
+    return Status::OK();
+  }
   return EnvWrapper::RenameFile(src, target);
 }
 
