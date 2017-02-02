@@ -39,6 +39,47 @@ Status err_to_status(int r) {
   }
 }
 
+class XdbSequentialFile : public SequentialFile {
+ public:
+  XdbSequentialFile(cloud_page_blob& page_blob)
+      : _page_blob(page_blob), _offset(0) {}
+  ~XdbSequentialFile() {}
+  Status Read(size_t n, Slice* result, char* scratch) {
+    std::cout << "<<<read data: " << n << std::endl;
+    _offset >>= 9;
+    size_t nz = (n >> 9) + 1;
+    std::vector<page_range> pages =
+        _page_blob.download_page_ranges(_offset, nz);
+    concurrency::streams::istream blobstream = _page_blob.open_read();
+    char* target = scratch;
+    size_t len = 0;
+    for (std::vector<page_range>::iterator it = pages.begin(); it < pages.end();
+         it++) {
+      // it->start_offset() it->end_offset()
+      blobstream.seek(it->start_offset());
+      concurrency::streams::stringstreambuf buffer;
+      blobstream.read(buffer, it->end_offset() - it->start_offset());
+      size_t bsize = buffer.size();
+      buffer.scopy(target, bsize);
+      target += bsize;
+      len += bsize;
+    }
+    std::cout << ">>>> actual read data: " << len << std::endl;
+    _offset += len;
+    *result = Slice(scratch, len);
+    return err_to_status(0);
+  }
+
+  Status Skip(uint64_t n) {
+    std::cout << "Skip:" << n << std::endl;
+    return Status::OK();
+  }
+
+ private:
+  cloud_page_blob _page_blob;
+  size_t _offset;
+};
+
 class XdbWritableFile : public WritableFile {
  public:
   XdbWritableFile(cloud_page_blob& page_blob) : _page_blob(page_blob) {
@@ -100,15 +141,6 @@ class XdbWritableFile : public WritableFile {
   cloud_page_blob _page_blob;
 };
 
-class XdbSequentialFile : public SequentialFile {
- public:
-  XdbSequentialFile() {}
-  ~XdbSequentialFile() {}
-  Status Read(size_t n, Slice* result, char* scratch) {
-    return err_to_status(0);
-  }
-};
-
 EnvXdb::EnvXdb(Env* env) : EnvWrapper(env) {
   // static EnvXdb default_env(env, std::getenv(default_conn));
   // char* connect_string =
@@ -152,8 +184,15 @@ Status EnvXdb::NewSequentialFile(const std::string& fname,
                                  std::unique_ptr<SequentialFile>* result,
                                  const EnvOptions& options) {
   std::cout << "new read file:" << fname << std::endl;
+  if (fname.find(was_store) == 0) {
+    cloud_page_blob page_blob =
+        _container.get_page_blob_reference(fname.substr(4));
+    result->reset(new XdbSequentialFile(page_blob));
+    return Status::OK();
+  }
   return EnvWrapper::NewSequentialFile(fname, result, options);
 }
+
 Status EnvXdb::NewDirectory(const std::string& name,
                             unique_ptr<Directory>* result) {
   return EnvWrapper::NewDirectory(name, result);
@@ -162,6 +201,46 @@ Status EnvXdb::NewDirectory(const std::string& name,
 Status EnvXdb::GetAbsolutePath(const std::string& db_path,
                                std::string* output_path) {
   return EnvWrapper::GetAbsolutePath(db_path, output_path);
+}
+
+std::string lastname(const std::string& name) {
+  std::size_t pos = name.find_last_of("/");
+  return name.substr(pos);
+}
+
+Status EnvXdb::GetChildren(const std::string& dir,
+                           std::vector<std::string>* result) {
+  std::cout << "GetChildren for: " << dir << std::endl;
+  if (dir.find(was_store) == 0) {
+    try {
+      result->clear();
+      list_blob_item_iterator end;
+      for (list_blob_item_iterator it = _container.list_blobs(
+               dir.substr(4), false, blob_listing_details::none, 0,
+               blob_request_options(), operation_context());
+           it != end; it++) {
+        if (it->is_blob()) {
+          std::cout << "blob:" << it->as_blob().name() << std::endl;
+        } else {
+          list_blob_item_iterator bend;
+          std::cout << "enumerate folder:" << it->as_directory().prefix()
+                    << std::endl;
+          for (list_blob_item_iterator bit = it->as_directory().list_blobs();
+               bit != bend; bit++) {
+            if (bit->is_blob()) {
+              result->push_back(lastname(bit->as_blob().name()));
+              std::cout << "blob:" << bit->as_blob().name() << std::endl;
+            }
+          }
+        }
+      }
+    } catch (const azure::storage::storage_exception& e) {
+      std::cout << "get children for " << dir.substr(4) << e.what()
+                << std::endl;
+    }
+    return Status::OK();
+  }
+  return EnvWrapper::GetChildren(dir, result);
 }
 
 void fixname(std::string& name) {

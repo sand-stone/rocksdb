@@ -17,9 +17,11 @@
 namespace rocksdb {
 
 class XdbWritableFile;
+class XdbSequentialFile;
 
 class EnvXdb : public EnvWrapper {
   friend class XdbWritableFile;
+  friend class XdbSequentialFile;
 
  public:
   explicit EnvXdb(Env* env);
@@ -40,6 +42,8 @@ class EnvXdb : public EnvWrapper {
 
   virtual Status RenameFile(const std::string& src,
                             const std::string& target) override;
+  virtual Status GetChildren(const std::string& dir,
+                             std::vector<std::string>* r) override;
 
   virtual ~EnvXdb() {}
 
@@ -47,6 +51,7 @@ class EnvXdb : public EnvWrapper {
 
  private:
   int WASRename(const std::string& src, const std::string& target);
+
  private:
   azure::storage::cloud_blob_client _blob_client;
   azure::storage::cloud_blob_container _container;
