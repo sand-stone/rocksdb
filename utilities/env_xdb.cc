@@ -43,23 +43,34 @@ class XdbSequentialFile : public SequentialFile {
  public:
   XdbSequentialFile(cloud_page_blob& page_blob)
       : _page_blob(page_blob), _offset(0) {}
+
   ~XdbSequentialFile() {}
+
   Status Read(size_t n, Slice* result, char* scratch) {
     std::cout << "<<<read data: " << n << std::endl;
-    _offset >>= 9;
-    size_t nz = (n >> 9) + 1;
+    _offset = (_offset >> 9) << 9;
+    size_t nz = ((n >> 9) + 1) << 9;
+    std::cout << "<<<download pages between " << _offset << " and:" << nz <<
+      std::endl;
     std::vector<page_range> pages =
         _page_blob.download_page_ranges(_offset, nz);
     concurrency::streams::istream blobstream = _page_blob.open_read();
     char* target = scratch;
     size_t len = 0;
+      for (std::vector<page_range>::iterator it = pages.begin(); it < pages.end();
+     it++) {
+        std::cout << "page start:" << it->start_offset() << "page end:" <<
+          it->end_offset() << std::endl;
+      }
     for (std::vector<page_range>::iterator it = pages.begin(); it < pages.end();
          it++) {
-      // it->start_offset() it->end_offset()
+      std::cout << "page start:" << it->start_offset() << "page end:" <<
+       it->end_offset() << std::endl;
       blobstream.seek(it->start_offset());
       concurrency::streams::stringstreambuf buffer;
       blobstream.read(buffer, it->end_offset() - it->start_offset());
       size_t bsize = buffer.size();
+      std::cout << "read back size:" << bsize;
       buffer.scopy(target, bsize);
       target += bsize;
       len += bsize;
