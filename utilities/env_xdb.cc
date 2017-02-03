@@ -59,23 +59,28 @@ class XdbSequentialFile : public SequentialFile {
       std::cout << "<<<empty read " << std::endl;
       return Status::OK();
     }
-    concurrency::streams::istream blobstream = _page_blob.open_read();
     char* target = scratch;
     size_t len = 0;
     size_t remain = n;
     for (std::vector<page_range>::iterator it = pages.begin(); it < pages.end();
          it++) {
-      std::cout << "page start:" << it->start_offset()
-                << "page end:" << it->end_offset() << std::endl;
-      blobstream.seek(it->start_offset());
+      std::cout << "page start: " << it->start_offset()
+                << "page end: " << it->end_offset() << std::endl;
+      std::cout << "seek to: " << it->start_offset() << std::endl;
+      concurrency::streams::istream blobstream = _page_blob.open_read();
+      blobstream.seek(it->start_offset(), std::ios_base::seekdir::beg);
       concurrency::streams::stringstreambuf buffer;
-      blobstream.read(buffer, it->end_offset() - it->start_offset());
+      blobstream.read(buffer, it->end_offset() - it->start_offset()).wait();
       size_t bsize = buffer.size();
       std::cout << "read back size:" << bsize;
       if (bsize > remain) bsize = remain;
-      buffer.scopy(target, bsize);
+      //buffer.scopy(target, bsize);
+      for(auto& ch : buffer.collection()) {
+        *target = ch;
+        target++;
+      }
       remain -= bsize;
-      target += bsize;
+      //target += bsize;
       len += bsize;
     }
     std::cout << ">>>> actual read data: " << len << std::endl;
@@ -84,6 +89,11 @@ class XdbSequentialFile : public SequentialFile {
       *result = Slice(scratch, 0);
     else
       *result = Slice(scratch, len >= n ? n : len);
+    std::ofstream myfile;
+    myfile.open("./log.bin");
+    for(size_t i = 0; i < len; i++) {
+      myfile<<scratch[i];
+    }
     return err_to_status(0);
   }
 
