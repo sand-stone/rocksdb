@@ -40,6 +40,10 @@ class EnvXdb : public EnvWrapper {
   virtual Status GetAbsolutePath(const std::string& db_path,
                                  std::string* output_path) override;
 
+  virtual Status GetFileSize(const std::string& f, uint64_t* s) override;
+
+  virtual Status FileExists(const std::string& fname) override;
+
   virtual Status RenameFile(const std::string& src,
                             const std::string& target) override;
   virtual Status GetChildren(const std::string& dir,

@@ -100,7 +100,7 @@ class XdbSequentialFile : public SequentialFile {
 class XdbWritableFile : public WritableFile {
  public:
   XdbWritableFile(cloud_page_blob& page_blob)
-    : _page_blob(page_blob), _index(0), _offset(0) {
+      : _page_blob(page_blob), _index(0), _offset(0) {
     _page_blob.create(64 * 1024 * 1024);
   }
 
@@ -112,13 +112,13 @@ class XdbWritableFile : public WritableFile {
     blobstream.seek(_offset);
     const char* src = data.data();
     size_t rc = data.size();
-    while(rc > 0) {
+    while (rc > 0) {
       /*ssize_t n = blobstream.write(buffer, rc).get();
       if(n < 0) {
         break;
         }*/
       ssize_t n = blobstream.write(src).get();
-      if(n < 0) {
+      if (n < 0) {
         break;
       }
       rc -= 1;
@@ -362,6 +362,36 @@ Status EnvXdb::RenameFile(const std::string& src, const std::string& target) {
     return Status::OK();
   }
   return EnvWrapper::RenameFile(src, target);
+}
+
+Status EnvXdb::FileExists(const std::string& fname) {
+  std::cout << "file exists: " << fname << std::endl;
+  if (fname.find(was_store) == 0) {
+    try {
+      cloud_page_blob page_blob =
+          _container.get_page_blob_reference(fname.substr(4));
+      return Status::OK();
+    } catch (const azure::storage::storage_exception& e) {
+      return Status::NotFound();
+    }
+  }
+  return EnvWrapper::FileExists(fname);
+}
+
+Status EnvXdb::GetFileSize(const std::string& f, uint64_t* s) {
+  std::cout << "GetFileSize for name:" << f << std::endl;
+  if (f.find(was_store) == 0) {
+    cloud_page_blob page_blob = _container.get_page_blob_reference(f.substr(4));
+    std::vector<page_range> pages = page_blob.download_page_ranges();
+    if (pages.size() == 0) {
+      *s = 0;
+    } else {
+      *s = pages[pages.size() - 1].end_offset();
+    }
+    std::cout << "GetFileSize size" << *s << std::endl;
+    return Status::OK();
+  }
+  return EnvWrapper::GetFileSize(f, s);
 }
 
 Status EnvXdb::DeleteFile(const std::string& f) {
