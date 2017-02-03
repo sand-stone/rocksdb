@@ -50,13 +50,10 @@ class XdbSequentialFile : public SequentialFile {
     std::cout << "<<<read data: " << n << std::endl;
     _offset = (_offset >> 9) << 9;
     size_t nz = ((n >> 9) + 1) << 9;
-    std::cout << "<<<download pages between " << _offset << " and:" << nz
-              << std::endl;
     std::vector<page_range> pages =
         _page_blob.download_page_ranges(_offset, nz);
     if (pages.size() == 0) {
       *result = Slice(scratch, 0);
-      std::cout << "<<<empty read " << std::endl;
       return Status::OK();
     }
     char* target = scratch;
@@ -64,15 +61,11 @@ class XdbSequentialFile : public SequentialFile {
     size_t remain = n;
     for (std::vector<page_range>::iterator it = pages.begin(); it < pages.end();
          it++) {
-      std::cout << "page start: " << it->start_offset()
-                << "page end: " << it->end_offset() << std::endl;
-      std::cout << "seek to: " << it->start_offset() << std::endl;
       concurrency::streams::istream blobstream = _page_blob.open_read();
       blobstream.seek(it->start_offset(), std::ios_base::seekdir::beg);
       concurrency::streams::stringstreambuf buffer;
       blobstream.read(buffer, it->end_offset() - it->start_offset()).wait();
       size_t bsize = buffer.size();
-      std::cout << "read back size:" << bsize;
       if (bsize > remain) bsize = remain;
       //buffer.scopy(target, bsize);
       for(auto& ch : buffer.collection()) {
@@ -83,17 +76,11 @@ class XdbSequentialFile : public SequentialFile {
       //target += bsize;
       len += bsize;
     }
-    std::cout << ">>>> actual read data: " << len << std::endl;
     _offset += len;
     if (len == 0)
       *result = Slice(scratch, 0);
     else
       *result = Slice(scratch, len >= n ? n : len);
-    std::ofstream myfile;
-    myfile.open("./log.bin");
-    for(size_t i = 0; i < len; i++) {
-      myfile<<scratch[i];
-    }
     return err_to_status(0);
   }
 
@@ -111,7 +98,7 @@ class XdbWritableFile : public WritableFile {
  public:
   XdbWritableFile(cloud_page_blob& page_blob)
       : _page_blob(page_blob), _pageindex(0), _pageoffset(0) {
-    _page_blob.create(1 * 1024 * 1024);
+    _page_blob.create(64 * 1024 * 1024);
   }
 
   ~XdbWritableFile() { std::cout << "close write file" << std::endl; }
