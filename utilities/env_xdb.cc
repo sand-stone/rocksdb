@@ -44,7 +44,7 @@ class XdbSequentialFile : public SequentialFile {
   XdbSequentialFile(cloud_page_blob& page_blob)
       : _page_blob(page_blob), _offset(0) {}
 
-  ~XdbSequentialFile() {}
+  ~XdbSequentialFile() { std::cout << "<<<close seq file " << std::endl; }
 
   Status Read(size_t n, Slice* result, char* scratch) {
     std::cout << "<<<read data: " << n << std::endl;
@@ -54,6 +54,11 @@ class XdbSequentialFile : public SequentialFile {
               << std::endl;
     std::vector<page_range> pages =
         _page_blob.download_page_ranges(_offset, nz);
+    if (pages.size() == 0) {
+      *result = Slice(scratch, 0);
+      std::cout << "<<<empty read " << std::endl;
+      return Status::OK();
+    }
     concurrency::streams::istream blobstream = _page_blob.open_read();
     char* target = scratch;
     size_t len = 0;
@@ -76,7 +81,7 @@ class XdbSequentialFile : public SequentialFile {
     std::cout << ">>>> actual read data: " << len << std::endl;
     _offset += len;
     if (len == 0)
-      *result = Slice();
+      *result = Slice(scratch, 0);
     else
       *result = Slice(scratch, len >= n ? n : len);
     return err_to_status(0);
@@ -95,11 +100,34 @@ class XdbSequentialFile : public SequentialFile {
 class XdbWritableFile : public WritableFile {
  public:
   XdbWritableFile(cloud_page_blob& page_blob)
-      : _page_blob(page_blob), _index(0) {
+    : _page_blob(page_blob), _index(0), _offset(0) {
     _page_blob.create(64 * 1024 * 1024);
   }
 
   ~XdbWritableFile() {}
+
+  Status Append2(const Slice& data) {
+    std::cout << "append data: " << data.size() << std::endl;
+    concurrency::streams::ostream blobstream = _page_blob.open_write();
+    blobstream.seek(_offset);
+    const char* src = data.data();
+    size_t rc = data.size();
+    while(rc > 0) {
+      /*ssize_t n = blobstream.write(buffer, rc).get();
+      if(n < 0) {
+        break;
+        }*/
+      ssize_t n = blobstream.write(src).get();
+      if(n < 0) {
+        break;
+      }
+      rc -= 1;
+      src += 1;
+    }
+    std::cout << "left : " << rc << std::endl;
+    _offset += data.size();
+    return err_to_status(0);
+  }
 
   Status Append(const Slice& data) {
     std::cout << "append data: " << data.size() << std::endl;
@@ -154,6 +182,7 @@ class XdbWritableFile : public WritableFile {
  private:
   cloud_page_blob _page_blob;
   size_t _index;
+  size_t _offset;
 };
 
 EnvXdb::EnvXdb(Env* env) : EnvWrapper(env) {
@@ -225,12 +254,19 @@ Status EnvXdb::GetAbsolutePath(const std::string& db_path,
 
 std::string lastname(const std::string& name) {
   std::size_t pos = name.find_last_of("/");
-  return name.substr(pos);
+  return name.substr(pos + 1);
+}
+
+std::string firstname(const std::string& name) {
+  std::string dirent(name);
+  dirent.resize(dirent.size() - 1);
+  std::size_t pos = dirent.find_last_of("/");
+  return dirent.substr(pos + 1);
 }
 
 Status EnvXdb::GetChildren(const std::string& dir,
                            std::vector<std::string>* result) {
-  // std::cout << "GetChildren for: " << dir << std::endl;
+  std::cout << "GetChildren for: " << dir << std::endl;
   if (dir.find(was_store) == 0) {
     try {
       result->clear();
@@ -249,7 +285,12 @@ Status EnvXdb::GetChildren(const std::string& dir,
                bit != bend; bit++) {
             if (bit->is_blob()) {
               result->push_back(lastname(bit->as_blob().name()));
-              // std::cout << "blob:" << bit->as_blob().name() << std::endl;
+              std::cout << "blob:" << lastname(bit->as_blob().name())
+                        << std::endl;
+            } else {
+              result->push_back(firstname(bit->as_directory().prefix()));
+              std::cout << "dir:" << firstname(bit->as_directory().prefix())
+                        << std::endl;
             }
           }
         }
