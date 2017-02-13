@@ -76,7 +76,7 @@
 #include "rocksdb/write_buffer_manager.h"
 #include "table/block.h"
 #include "table/block_based_table_factory.h"
-#include "table/merger.h"
+#include "table/merging_iterator.h"
 #include "table/table_builder.h"
 #include "table/two_level_iterator.h"
 #include "util/autovector.h"
@@ -4000,18 +4000,32 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   auto cfd = cfh->cfd();
 
+  // Acquire SuperVersion
+  SuperVersion* sv = GetAndRefSuperVersion(cfd);
+
+  TEST_SYNC_POINT("DBImpl::GetImpl:1");
+  TEST_SYNC_POINT("DBImpl::GetImpl:2");
+
   SequenceNumber snapshot;
   if (read_options.snapshot != nullptr) {
     snapshot = reinterpret_cast<const SnapshotImpl*>(
         read_options.snapshot)->number_;
   } else {
+    // Since we get and reference the super version before getting
+    // the snapshot number, without a mutex protection, it is possible
+    // that a memtable switch happened in the middle and not all the
+    // data for this snapshot is available. But it will contain all
+    // the data available in the super version we have, which is also
+    // a valid snapshot to read from.
+    // We shouldn't get snapshot before finding and referencing the
+    // super versipon because a flush happening in between may compact
+    // away data for the snapshot, but the snapshot is earlier than the
+    // data overwriting it, so users may see wrong results.
     snapshot = versions_->LastSequence();
   }
+  TEST_SYNC_POINT("DBImpl::GetImpl:3");
+  TEST_SYNC_POINT("DBImpl::GetImpl:4");
 
-  TEST_SYNC_POINT("DBImpl::GetImpl:1");
-  TEST_SYNC_POINT("DBImpl::GetImpl:2");
-  // Acquire SuperVersion
-  SuperVersion* sv = GetAndRefSuperVersion(cfd);
   // Prepare to store a list of merge operations if merge occurs.
   MergeContext merge_context;
   RangeDelAggregator range_del_agg(cfd->internal_comparator(), snapshot);
@@ -5544,6 +5558,28 @@ ColumnFamilyHandle* DBImpl::GetColumnFamilyHandle(uint32_t column_family_id) {
   return cf_memtables->GetColumnFamilyHandle();
 }
 
+void DBImpl::GetApproximateMemTableStats(ColumnFamilyHandle* column_family,
+                                         const Range& range,
+                                         uint64_t* const count,
+                                         uint64_t* const size) {
+  ColumnFamilyHandleImpl* cfh =
+      reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
+  ColumnFamilyData* cfd = cfh->cfd();
+  SuperVersion* sv = GetAndRefSuperVersion(cfd);
+
+  // Convert user_key into a corresponding internal key.
+  InternalKey k1(range.start, kMaxSequenceNumber, kValueTypeForSeek);
+  InternalKey k2(range.limit, kMaxSequenceNumber, kValueTypeForSeek);
+  MemTable::MemTableStats memStats =
+      sv->mem->ApproximateStats(k1.Encode(), k2.Encode());
+  MemTable::MemTableStats immStats =
+      sv->imm->ApproximateStats(k1.Encode(), k2.Encode());
+  *count = memStats.count + immStats.count;
+  *size = memStats.size + immStats.size;
+
+  ReturnAndCleanupSuperVersion(cfd, sv);
+}
+
 void DBImpl::GetApproximateSizes(ColumnFamilyHandle* column_family,
                                  const Range* range, int n, uint64_t* sizes,
                                  uint8_t include_flags) {
@@ -5564,8 +5600,8 @@ void DBImpl::GetApproximateSizes(ColumnFamilyHandle* column_family,
       sizes[i] += versions_->ApproximateSize(v, k1.Encode(), k2.Encode());
     }
     if (include_flags & DB::SizeApproximationFlags::INCLUDE_MEMTABLES) {
-      sizes[i] += sv->mem->ApproximateSize(k1.Encode(), k2.Encode());
-      sizes[i] += sv->imm->ApproximateSize(k1.Encode(), k2.Encode());
+      sizes[i] += sv->mem->ApproximateStats(k1.Encode(), k2.Encode()).size;
+      sizes[i] += sv->imm->ApproximateStats(k1.Encode(), k2.Encode()).size;
     }
   }
 

@@ -72,7 +72,6 @@
 #include <io.h>  // open/close
 #endif
 
-namespace {
 using GFLAGS::ParseCommandLineFlags;
 using GFLAGS::RegisterFlagValidator;
 using GFLAGS::SetUsageMessage;
@@ -604,7 +603,7 @@ DEFINE_bool(use_stderr_info_logger, false,
 
 DEFINE_bool(use_blob_db, false, "Whether to use BlobDB. ");
 
-enum rocksdb::CompressionType StringToCompressionType(const char* ctype) {
+static enum rocksdb::CompressionType StringToCompressionType(const char* ctype) {
   assert(ctype);
 
   if (!strcasecmp(ctype, "none"))
@@ -628,7 +627,7 @@ enum rocksdb::CompressionType StringToCompressionType(const char* ctype) {
   return rocksdb::kSnappyCompression;  // default value
 }
 
-std::string ColumnFamilyName(size_t i) {
+static std::string ColumnFamilyName(size_t i) {
   if (i == 0) {
     return rocksdb::kDefaultColumnFamilyName;
   } else {
@@ -872,7 +871,7 @@ enum RepFactory {
   kCuckoo
 };
 
-enum RepFactory StringToRepFactory(const char* ctype) {
+static enum RepFactory StringToRepFactory(const char* ctype) {
   assert(ctype);
 
   if (!strcasecmp(ctype, "skip_list"))
@@ -940,7 +939,6 @@ static const bool FLAGS_deletepercent_dummy __attribute__((unused)) =
 static const bool FLAGS_table_cache_numshardbits_dummy __attribute__((unused)) =
     RegisterFlagValidator(&FLAGS_table_cache_numshardbits,
                           &ValidateTableCacheNumshardbits);
-}  // namespace
 
 namespace rocksdb {
 
@@ -1213,7 +1211,7 @@ class ReporterAgent {
       abort();
     }
 
-    reporting_thread_ = std::thread([&]() { SleepAndReport(); });
+    reporting_thread_ = port::Thread([&]() { SleepAndReport(); });
   }
 
   ~ReporterAgent() {
@@ -1273,7 +1271,7 @@ class ReporterAgent {
   std::atomic<int64_t> total_ops_done_;
   int64_t last_report_;
   const uint64_t report_interval_secs_;
-  std::thread reporting_thread_;
+  rocksdb::port::Thread reporting_thread_;
   std::mutex mutex_;
   // will notify on stop
   std::condition_variable stop_cv_;
